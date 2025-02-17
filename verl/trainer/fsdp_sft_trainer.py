@@ -20,6 +20,7 @@ TODO(zhangchi.usc1992)
 
 import os
 
+# this is for local ray cluster
 os.environ['NCCL_DEBUG'] = 'WARN'
 os.environ['TOKENIZERS_PARALLELISM'] = 'true'
 
@@ -41,11 +42,13 @@ from verl.utils.fsdp_utils import get_fsdp_wrap_policy, init_fn, get_init_weight
 from verl.utils.dataset import SFTDataset
 from verl.utils.fs import copy_local_path_from_hdfs
 from verl.utils.tracking import Tracking
+# deepspeed ulysses sequence parallel utils
 from verl.utils.ulysses import get_ulysses_sequence_parallel_world_size, set_ulysses_sequence_parallel_group
 from torch.distributed.device_mesh import DeviceMesh
 
 import verl.utils.hdfs_io as hdfs_io
 from verl.utils.debug import log_gpu_memory_usage
+# for lora turning in sft training
 from peft import LoraConfig, TaskType, get_peft_model
 
 from verl.workers.sharding_manager import FSDPUlyssesShardingManager
@@ -62,7 +65,7 @@ def extract_step(path):
         return int(match.group(1))
     return None
 
-
+# Hydra and omegaconf is the package for config management
 def convert_to_regular_types(obj):
     """Convert Hydra configs and other special types to regular Python types."""
     from omegaconf import ListConfig, DictConfig
@@ -79,12 +82,15 @@ class FSDPSFTTrainer(object):
 
     def __init__(self, config, device_mesh: DeviceMesh, ulysses_device_mesh: DeviceMesh):
         self.config = config
+        # pytorch device mesh
         self.device_mesh = device_mesh
+        # deepspeed ulysses sequence parallel device mesh
         self.ulysses_device_mesh = ulysses_device_mesh
         self.sharding_manager = FSDPUlyssesShardingManager(self.ulysses_device_mesh)
         # build tokenizer first
         local_model_path = copy_local_path_from_hdfs(src=self.config.model.partial_pretrain, verbose=True)
         from verl.utils import hf_tokenizer
+        # the tokenizer is used to tokenize the input text in the sftdataset
         self.tokenizer = hf_tokenizer(local_model_path, trust_remote_code=self.config.model.trust_remote_code)
         if self.config.data.chat_template is not None:
             raise ValueError('Apply Chat template from config is not supported yet.')
@@ -113,7 +119,7 @@ class FSDPSFTTrainer(object):
             print(f'Normalize batch size by dp {dp_size}')
 
         assert self.config.data.train_batch_size % dp_size == 0, f"Global batch size {self.config.data.train_batch_size} is not divisible by dp size {dp_size}"
-
+        # update the train_batch_size by dp size here of the config
         self.config.data.train_batch_size //= dp_size
 
         assert self.config.data.train_batch_size % self.config.data.micro_batch_size_per_gpu == 0
@@ -171,6 +177,7 @@ class FSDPSFTTrainer(object):
                                               num_replicas=world_size,
                                               rank=rank,
                                               drop_last=True)
+        # why the val_dataloader is using the micro_batch_size_per_gpu?
         self.val_dataloader = DataLoader(dataset=self.val_dataset,
                                          batch_size=config.data.micro_batch_size_per_gpu,
                                          sampler=self.val_sampler,
@@ -219,6 +226,7 @@ class FSDPSFTTrainer(object):
                 _apply_liger_kernel_to_instance(model=self.model)
 
             if self.config.model.get('lora_rank', 0) > 0:
+                # enable input require grads for lora turning
                 self.model.enable_input_require_grads()
                 # Convert config to regular Python types before creating PEFT model
                 lora_config = {
@@ -327,7 +335,7 @@ class FSDPSFTTrainer(object):
                     batch_size, seqlen = input_ids.shape
                     # Remove padding
                     input_ids_rmpad, indices, *_ = unpad_input(input_ids.unsqueeze(-1),
-                                                               attention_mask)  # input_ids_rmpad (total_nnz, ...)
+                                                               attention_mask)  # input_ids_rmpad (total_nnz, ...)，nnz is maybe non-zero
                     input_ids_rmpad = input_ids_rmpad.transpose(0, 1)  # (1, total_nnz)
 
                     # Unpad position_ids to align rotary
