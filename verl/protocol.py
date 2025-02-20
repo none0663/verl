@@ -54,9 +54,11 @@ def pad_dataproto_to_divisor(data: 'DataProto', size_divisor: int):
         padding_protos = []
         remaining_pad = pad_size
         while remaining_pad > 0:
+            # if the size of the remaining_pad is less than len(data)
             take_size = min(remaining_pad, len(data))
             padding_protos.append(data[:take_size])
             remaining_pad -= take_size
+        # append for a list.
         data_padded = DataProto.concat([data] + padding_protos)
     else:
         pad_size = 0
@@ -98,6 +100,7 @@ def union_numpy_dict(tensor_dict1: dict[np.ndarray], tensor_dict2: dict[np.ndarr
 
 
 def list_of_dict_to_dict_of_list(list_of_dict: list[dict]):
+    # append to one list of the dict.
     if len(list_of_dict) == 0:
         return {}
     keys = list_of_dict[0].keys()
@@ -149,6 +152,7 @@ def unfold_batch_dim(data: 'DataProto', batch_dims=2):
 
 
 def collate_fn(x: list['DataProtoItem']):
+    # batch data is tensor data.
     batch = []
     non_tensor_batch = []
     for data in x:
@@ -252,6 +256,7 @@ class DataProto:
         We expose this function as a public one so that user can call themselves directly
         """
         if self.batch is not None:
+            # Note need to check why the num_batch_dims is 1?
             assert len(self.batch.batch_size) == 1, 'only support num_batch_dims=1'
 
         if self.non_tensor_batch is not None:

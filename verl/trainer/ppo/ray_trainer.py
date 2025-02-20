@@ -9,7 +9,7 @@
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
+# See thze License for the specific language governing permissions and
 # limitations under the License.
 """
 FSDP PPO Trainer with Ray-based single controller.
@@ -65,6 +65,7 @@ class ResourcePoolManager:
     resource_pool_dict: dict[str, RayResourcePool] = field(default_factory=dict)
 
     def create_resource_pool(self):
+        # process_on_nodes is the number of nodes(a list) to be used for each resource pool
         for resource_pool_name, process_on_nodes in self.resource_pool_spec.items():
             # max_colocate_count means the number of WorkerGroups (i.e. processes) in each RayResourcePool
             # For FSDP backend, we recommend using max_colocate_count=1 that merge all WorkerGroups into one.
@@ -851,6 +852,7 @@ class RayPPOTrainer(object):
                 with _timer('step', timing_raw):
                     # generate a batch
                     with _timer('gen', timing_raw):
+                        # because the config rollout.n, the generation will be n times when generating the output, Note that is not the greedy mode.
                         gen_batch_output = self.actor_rollout_wg.generate_sequences(gen_batch)
 
                     if self.config.algorithm.adv_estimator == 'remax':
@@ -871,7 +873,7 @@ class RayPPOTrainer(object):
 
                     batch.non_tensor_batch['uid'] = np.array([str(uuid.uuid4()) for _ in range(len(batch.batch))],
                                                              dtype=object)
-                    # repeat to align with repeated responses in rollout
+                    # repeat to align with repeated responses in rollout, repeat the input here
                     batch = batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
                     batch = batch.union(gen_batch_output)
 

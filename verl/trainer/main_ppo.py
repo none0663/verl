@@ -27,7 +27,7 @@ def main(config):
 
 def run_ppo(config, compute_score=None):
     if not ray.is_initialized():
-        # this is for local ray cluster
+        # this is for local ray cluster, env vars.
         ray.init(runtime_env={'env_vars': {'TOKENIZERS_PARALLELISM': 'true', 'NCCL_DEBUG': 'WARN'}})
 
     ray.get(main_task.remote(config, compute_score))
@@ -74,6 +74,7 @@ def main_task(config, compute_score=None):
     }
 
     global_pool_id = 'global_pool'
+    # each node has n_gpus_per_node GPUs, the global pool is the list GPUs in all nodes
     resource_pool_spec = {
         global_pool_id: [config.trainer.n_gpus_per_node] * config.trainer.nnodes,
     }

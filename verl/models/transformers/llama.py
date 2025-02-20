@@ -89,7 +89,8 @@ def llama_flash_attn_forward(
         cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
         key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-    # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
+    # TODO: These transpose are quite inefficient but Flash Attention requires the 
+    # layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
     # to be able to avoid many of these transpose/reshape/view.
     query_states = query_states.transpose(1, 2)
     key_states = key_states.transpose(1, 2)
@@ -139,6 +140,7 @@ def llama_flash_attn_forward(
     attn_output = attn_output.reshape(bsz, full_q_len, -1, self.head_dim).contiguous()
     ########## AlltoAll for Ulysses ##########
     if ulysses_sp_size > 1:
+        # (bsz, seq_len, n_head/n, head_dim) -> (bsz, seq_len/n, n_head, head_dim)
         attn_output = gather_heads_scatter_seq(attn_output, seq_dim=1, head_dim=2)
     attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
     attn_output = self.o_proj(attn_output)

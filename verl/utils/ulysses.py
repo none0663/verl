@@ -140,6 +140,7 @@ def all_to_all_tensor(
     seq_world_size = dist.get_world_size(group)
     input_list = [t.contiguous() for t in torch.tensor_split(local_input, seq_world_size, scatter_dim)]
     output_list = [torch.empty_like(input_list[0]) for _ in range(seq_world_size)]
+    # https://pytorch.org/docs/stable/distributed.html
     comm = dist.all_to_all(output_list, input_list, group=group, async_op=async_op)
     if async_op:
 
