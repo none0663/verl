@@ -302,7 +302,11 @@ class ActorRolloutRefWorker(Worker):
             rollout_sharding_manager = BaseShardingManager()
             # TODO: a sharding manager that do nothing?
         elif self.config.rollout.name == 'vllm':
-            from verl.workers.rollout.vllm_rollout import vLLMRollout, vllm_mode
+            if self.config.rollout.use_fire_sampling:
+                from verl.workers.rollout.vllm_rollout import FIREvLLMRollout as vLLMRollout
+                from verl.workers.rollout.vllm_rollout import vllm_mode
+            else:
+                from verl.workers.rollout.vllm_rollout import vLLMRollout, vllm_mode
             from verl.workers.sharding_manager import FSDPVLLMShardingManager
             log_gpu_memory_usage('Before building vllm rollout', logger=None)
             local_path = copy_to_local(self.config.model.path)
@@ -576,6 +580,9 @@ class ActorRolloutRefWorker(Worker):
         if self._is_offload_param:
             offload_fsdp_model_to_cpu(self.actor_module_fsdp)
 
+        if self._is_offload_optimizer:
+            offload_fsdp_optimizer(self.actor_optimizer)
+
 
 class CriticWorker(Worker):
 
@@ -847,6 +854,9 @@ class CriticWorker(Worker):
         torch.distributed.barrier()
         if self._is_offload_param:
             offload_fsdp_model_to_cpu(self.critic_module)
+
+        if self._is_offload_optimizer:
+            offload_fsdp_optimizer(self.critic_optimizer)
 
 
 # TODO(sgm): we may need to extract it to dp_reward_model.py
