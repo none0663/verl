@@ -157,7 +157,7 @@ DATA=(
     data.max_response_length=$max_response_length
     data.truncation='right'
     data.filter_overlong_prompts=True
-    data.filter_overlong_prompts_workers=256
+    data.filter_overlong_prompts_workers=64
 )
 
 TRAINER=(
