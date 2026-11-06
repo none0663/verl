@@ -3,7 +3,7 @@
 Config Explanation
 ===================
 
-Last updated: 10/01/2026.
+Last updated: 11/06/2026.
 
 ppo_trainer.yaml for RL FSDP Backend
 -------------------------------------
@@ -97,6 +97,12 @@ Customized dataset extension is implemented for the SFT trainer and can be exten
 
 - ``data.custom_cls.path``: The path to the file containing your customized dataset class. If not specified, pre-implemented dataset will be used.
 - ``data.custom_cls.name``: The name of the dataset class within the specified file.
+
+For custom RL datasets using the default ``collate_fn``, every sample in a batch
+must have the same keys. Each field must contain tensors in every sample or
+non-tensor values in every sample. Optional non-tensor fields can use ``None``
+as an explicit value; do not omit the key. Inconsistent samples raise an error
+that identifies the field and the zero-based sample index within the batch.
 
 Actor/Rollout/Reference Policy
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

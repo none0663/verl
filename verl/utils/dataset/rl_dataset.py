@@ -44,21 +44,34 @@ def collate_fn(data_list: list[dict]) -> dict:
 
     Args:
         data_list: List of dicts mapping feature names to torch.Tensor or other values.
+            All samples must have the same keys. Each field must contain either
+            tensors in every sample or non-tensor values in every sample.
 
     Returns:
         Dict where tensor entries are stacked into a torch.Tensor of shape
         (batch_size, \\*dims) and non-tensor entries are converted to
         np.ndarray of dtype object with shape (batch_size,).
+
+    Raises:
+        ValueError: If a sample has missing or extra keys relative to the first sample.
+        TypeError: If a field mixes tensor and non-tensor values across samples.
     """
     tensors = defaultdict(list)
     non_tensors = defaultdict(list)
+    expected_keys = data_list[0].keys() if data_list else set()
 
-    for data in data_list:
+    for sample_index, data in enumerate(data_list):
+        if data.keys() != expected_keys:
+            raise ValueError(
+                f"Inconsistent fields in sample {sample_index}: "
+                f"missing keys {sorted(expected_keys - data.keys())}, "
+                f"extra keys {sorted(data.keys() - expected_keys)}."
+            )
         for key, val in data.items():
-            if isinstance(val, torch.Tensor):
-                tensors[key].append(val)
-            else:
-                non_tensors[key].append(val)
+            is_tensor = isinstance(val, torch.Tensor)
+            if (is_tensor and key in non_tensors) or (not is_tensor and key in tensors):
+                raise TypeError(f"Field {key!r} mixes tensor and non-tensor values in sample {sample_index}.")
+            (tensors if is_tensor else non_tensors)[key].append(val)
 
     for key, val in tensors.items():
         tensors[key] = torch.stack(val, dim=0)
