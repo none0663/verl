@@ -65,7 +65,7 @@ class AgentData:
         mm_processor_kwargs: Optional[dict[str, Any]],
         metrics: dict[str, Any],
         request_id: str,
-        tools_kwargs: dict[str, Any],
+        tools_kwargs: Optional[dict[str, Any]],
     ):
         self.messages = messages
         self.image_data = image_data
@@ -443,7 +443,7 @@ class ToolAgentLoop(AgentLoopBase):
         return message
 
     async def _call_tool(
-        self, tool_call: FunctionCall, tools_kwargs: dict[str, Any], agent_data: AgentData
+        self, tool_call: FunctionCall, tools_kwargs: Optional[dict[str, Any]], agent_data: AgentData
     ) -> tuple[ToolResponse, float, dict]:
         """Call tool and return tool response.
 
@@ -484,8 +484,10 @@ class ToolAgentLoop(AgentLoopBase):
                 tool_execution_response, tool_reward, res = normalize_function_tool_return(raw)
             else:
                 # BaseTool subclass
-                kwargs = tools_kwargs.get(tool_name, {})
-                instance_id, _ = await tool.create(create_kwargs=kwargs.get("create_kwargs", {}))
+                # Dataset schema alignment can fill omitted nested configuration with None.
+                kwargs = tools_kwargs.get(tool_name) if tools_kwargs is not None else None
+                create_kwargs = kwargs.get("create_kwargs") if kwargs is not None else None
+                instance_id, _ = await tool.create(create_kwargs=create_kwargs if create_kwargs is not None else {})
                 tool_execution_response, tool_reward, res = await tool.execute(
                     instance_id, tool_args, agent_data=agent_data
                 )

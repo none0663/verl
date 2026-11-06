@@ -21,9 +21,15 @@ instead of generic exception strings.
 import unittest
 from dataclasses import dataclass, field
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
+
+import datasets
+import pytest
+from omegaconf import OmegaConf
+from torch.utils.data import DataLoader
 
 from verl.tools.schemas import ToolResponse
+from verl.utils.dataset.rl_dataset import RLHFDataset, collate_fn
 
 
 @dataclass
@@ -186,6 +192,64 @@ class TestCallToolErrorHandling(unittest.IsolatedAsyncioTestCase):
         assert response.text.startswith("Search results")
         assert response.text.endswith("...(truncated)")
         assert "Final answer: Paris" not in response.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "extra_info",
+    [
+        {"index": 0},
+        {"index": 0, "tools_kwargs": {"search": {"create_kwargs": {"limit": 1}}}},
+        {"index": 0, "tools_kwargs": {"calculator": {"execute_kwargs": {"precision": 2}}}},
+    ],
+    ids=["missing-tools-kwargs", "missing-tool", "missing-create-kwargs"],
+)
+async def test_tool_call_with_kwargs_from_mixed_parquet(tmp_path, extra_info):
+    """Schema alignment must not turn omitted tool configuration into a failed call."""
+    configured_kwargs = {"ground_truth": "42"}
+    configured_extra_info = {
+        "index": 1,
+        "tools_kwargs": {"calculator": {"create_kwargs": configured_kwargs}},
+    }
+    data_files = []
+    for index, info in enumerate([extra_info, configured_extra_info]):
+        path = tmp_path / f"samples-{index}.parquet"
+        datasets.Dataset.from_list(
+            [{"prompt": [{"role": "user", "content": "Calculate 3 + 5."}], "extra_info": info}]
+        ).to_parquet(path)
+        data_files.append(str(path))
+
+    dataset = RLHFDataset(
+        data_files=data_files,
+        tokenizer=None,
+        config=OmegaConf.create({"filter_overlong_prompts": False, "cache_dir": str(tmp_path / "cache")}),
+    )
+    batch = next(iter(DataLoader(dataset, batch_size=2, collate_fn=collate_fn)))
+    # Hugging Face fills the omitted struct field with None at one of these levels.
+    missing_kwargs = batch["tools_kwargs"][0]
+    assert (
+        missing_kwargs is None
+        or missing_kwargs["calculator"] is None
+        or missing_kwargs["calculator"]["create_kwargs"] is None
+    )
+
+    tool = FakeTool("calculator")
+    tool.create = AsyncMock(wraps=tool.create)
+    tool.execute = AsyncMock(wraps=tool.execute)
+    tool.release = AsyncMock(wraps=tool.release)
+    loop = _make_tool_agent_loop({"calculator": tool})
+    tool_call = FakeFunctionCall(name="calculator", arguments='{"a": 3, "b": 5}')
+
+    for tools_kwargs, expected_kwargs in zip(batch["tools_kwargs"], [{}, configured_kwargs], strict=True):
+        agent_data = FakeAgentData(tools_kwargs=tools_kwargs)
+        response, reward, _ = await loop._call_tool(tool_call, tools_kwargs, agent_data)
+        assert response.text == "OK: {'a': 3, 'b': 5}"
+        assert reward == 1.0
+        tool.create.assert_awaited_with(create_kwargs=expected_kwargs)
+        tool.execute.assert_awaited_with("instance_1", {"a": 3, "b": 5}, agent_data=agent_data)
+        tool.release.assert_awaited_with("instance_1")
+
+    assert tool.create.await_count == tool.execute.await_count == tool.release.await_count == 2
 
 
 if __name__ == "__main__":

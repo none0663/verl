@@ -1,7 +1,7 @@
 Multi-turn Rollout Support
 ==========================
 
-Last updated: 05/09/2026.
+Last updated: 11/06/2026.
 
 Basic Configuration
 ~~~~~~~~~~~~~~~~~~~
@@ -31,6 +31,13 @@ For custom environment interaction tools, you can implement your own tools based
         tool_schema:
 
 For stateless tools that don't need ``BaseTool``'s ``create``/``release`` lifecycle, see the `Function Tool Configuration`_ section below for the simpler ``@function_tool`` API.
+
+When using ``ToolAgentLoop``, per-sample initialization parameters for a ``BaseTool``
+are read from ``extra_info.tools_kwargs.<tool_name>.create_kwargs`` and passed to
+``tool.create(create_kwargs=...)``. Missing or null values at any of these three
+configuration levels default to an empty dictionary. This also applies when
+dataset schema alignment fills omitted fields with null while combining Parquet
+files; parameters inside a supplied ``create_kwargs`` dictionary are preserved.
 
 Finally, set the ``tools_config_file`` in your rollout config:
 
